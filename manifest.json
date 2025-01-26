@@ -1,6 +1,6 @@
 {
     "short_name": "电影清单",
-    "name": "小狗的电影清单",
+    "name": "电影清单",
     "start_url": "index.html",
     "display": "standalone",
     "background_color": "#ffffff",
