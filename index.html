@@ -1,0 +1,1068 @@
+
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>电影清单 - 小狗的网页（PWA 版）</title>
+
+  <!-- ========== PWA: 基础配置 ========== -->
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#ff7eb3" />
+  <!-- iOS上的web app支持 -->
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="小狗的电影清单"/>
+
+  <style>
+    /* ========== 全局基础样式 ========== */
+    body {
+      font-family: 'Arial', sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: #f8f9fa;
+    }
+
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      background: linear-gradient(90deg, #ff7eb3, #ff758c);
+      color: #fff;
+      text-align: center;
+      padding: 10px 0;
+      font-size: 1.5em;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+    }
+
+    nav {
+      display: flex;
+      justify-content: space-around;
+      background: #ff94c2;
+      padding: 10px 0;
+    }
+    nav button {
+      padding: 10px 15px;
+      border: none;
+      border-radius: 20px;
+      background: #fff;
+      cursor: pointer;
+      font-size: 1em;
+      transition: all 0.3s ease;
+      margin: 3px;
+    }
+    nav button:hover {
+      background: #ffe3ee;
+    }
+
+    /* 让主内容区留出底部空间，避免被固定footer遮挡 */
+    main {
+      padding: 20px;
+      padding-bottom: 100px; /* 根据footer高度做适当调整 */
+    }
+
+    .section {
+      display: none;
+    }
+    .section.active {
+      display: block;
+    }
+
+    /* 卡片布局 */
+    .movie-list-grid {
+      margin-top: 10px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 10px;
+    }
+
+    .movie-card {
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 10px;
+      padding: 10px;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+      text-align: center;
+      position: relative;
+    }
+    .movie-card button {
+      margin: 3px;
+    }
+
+    /* 如果有观影感想则显示在这里 */
+    .review-text {
+      color: #555;
+      font-style: italic;
+      margin-top: 6px;
+      white-space: pre-line; /* 保留换行 */
+    }
+
+    /* 搜索时的高亮边框 */
+    .highlight {
+      border: 2px solid red;
+    }
+
+    /* 在小屏幕下，让 nav 按钮 & 卡片一列显示 */
+    @media (max-width: 600px) {
+      nav {
+        flex-direction: column;
+        align-items: center;
+      }
+      nav button {
+        width: 80%;
+        margin: 5px 0;
+      }
+      .movie-list-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* ========== 固定底部 footer ========== */
+    footer {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      background-color: #ff94c2;
+      text-align: center;
+      padding: 10px 0;
+      box-shadow: 0 -2px 5px rgba(0, 0, 0, 0.2);
+      z-index: 9999; 
+    }
+    footer button {
+      margin: 3px;
+      padding: 6px 12px;
+      border: none;
+      border-radius: 20px;
+      background: #fff;
+      cursor: pointer;
+      font-size: 1em;
+      transition: all 0.3s ease;
+    }
+    footer button:hover {
+      background: #ffe3ee;
+    }
+
+    /* 统计容器 */
+    #stats-container {
+      display: flex;
+      justify-content: space-around;
+      margin-bottom: 20px;
+    }
+    #stats-container > div {
+      flex: 1;
+      text-align: center;
+      font-size: 1.1em;
+      font-weight: bold;
+      margin: 0 5px;
+    }
+
+    /* 积分显示 */
+    .points-display {
+      color: #ff4500; 
+      font-weight: bold;
+      text-align: center;
+      margin: 10px 0;
+      font-size: 1.2em;
+    }
+
+    /* 模态框基础 */
+    .modal {
+      display: none;
+      position: fixed;
+      z-index: 10000; /* 提高z-index，保证覆盖footer */
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      overflow: auto; 
+      background-color: rgba(0, 0, 0, 0.5);
+    }
+    .modal-content {
+      background-color: #fff;
+      margin: 10% auto; 
+      padding: 20px;
+      border: 1px solid #888;
+      width: 80%;
+      max-width: 500px;
+      border-radius: 10px;
+      max-height: 80%; 
+      overflow-y: auto; 
+    }
+
+    /* 折叠/展开 (已观看) */
+    .collapsible-header {
+      cursor: pointer;
+      font-weight: bold;
+      background: #ffe3ee;
+      padding: 8px;
+      border-radius: 5px;
+      margin: 5px 0;
+    }
+    .collapsible-content {
+      display: none;
+      margin: 5px 0;
+    }
+    .collapsible-content.show {
+      display: block;
+    }
+
+    /* 过期目标的样式 */
+    .expired {
+      background-color: #ffe0e0; 
+      border-color: red;
+    }
+    .expired-text {
+      color: red;
+    }
+
+    /* 排序/筛选模态框 */
+    #sort-filter-modal {
+      display: none;
+      position: fixed;
+      z-index: 12000;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,.5);
+    }
+    #sort-filter-modal .modal-content {
+      margin: 10% auto;
+      max-width: 400px;
+      max-height: 80%;
+      overflow-y: auto;
+    }
+  </style>
+</head>
+<body>
+  <header>🎬 小狗的电影清单 🎯</header>
+
+  <nav>
+    <button onclick="showSection('goal-section')">每周目标</button>
+    <button onclick="showSection('list-section')">电影清单</button>
+  </nav>
+
+  <main>
+    <!-- =========== 每周目标区 =========== -->
+    <section id="goal-section" class="section active">
+      <h2>🎯 每周目标</h2>
+
+      <div class="points-display">
+        当前积分：<span id="points-value">0</span>
+      </div>
+
+      <label for="weekly-goal">设置本周目标电影数：</label>
+      <input type="number" id="weekly-goal" value="3" style="width:60px;"/>
+
+      <label for="deadline">目标截止日期：</label>
+      <input type="date" id="deadline" />
+
+      <div style="margin:10px 0;">
+        <button onclick="manualSelectGoal()">手动选择目标</button>
+        <button onclick="randomGenerateGoal()">随机生成目标</button>
+      </div>
+
+      <h3>目标列表：</h3>
+      <div id="goal-list" class="movie-list-grid"></div>
+
+      <h3>已观看：</h3>
+      <div id="completed-collapsible"></div>
+    </section>
+
+    <!-- 手动选择目标 模态框 -->
+    <div id="manual-select-modal" class="modal">
+      <div class="modal-content">
+        <h3>请选择本周目标电影：</h3>
+        <div id="manual-select-list"></div>
+        <button onclick="confirmManualSelection()">确认选择</button>
+        <button onclick="closeModal()">取消</button>
+      </div>
+    </div>
+
+    <!-- =========== 电影清单区 =========== -->
+    <section id="list-section" class="section">
+      <div id="stats-container">
+        <div style="color: #ff7eb3;">
+          🎬 总电影数：
+          <span id="total-movies">0</span>
+        </div>
+        <div style="color: #ffb347;">
+          📌 未观看：
+          <span id="unwatched-movies">0</span>
+        </div>
+        <div style="color: #66cdaa;">
+          ✅ 已观看：
+          <span id="watched-movies">0</span>
+        </div>
+      </div>
+
+      <div class="points-display">
+        当前积分：<span id="points-value-2">0</span>
+      </div>
+
+      <!-- 隐藏的文件上传控件 -->
+      <input 
+        type="file" 
+        id="fileInput" 
+        style="display: none;" 
+        accept=".json"
+        onchange="handleFileUpload(event)"
+      />
+
+      <h3>未观看列表</h3>
+      <div id="movie-list" class="movie-list-grid"></div>
+    </section>
+  </main>
+
+  <!-- 排序/筛选 模态框 -->
+  <div id="sort-filter-modal">
+    <div class="modal-content">
+      <h3>排序 & 筛选</h3>
+      <label>排序字段：</label>
+      <select id="sort-field">
+        <option value="">(不排序)</option>
+        <option value="year">年份</option>
+        <option value="rating">评分</option>
+        <option value="country">国家</option>
+      </select>
+      <label>顺序：</label>
+      <select id="sort-order">
+        <option value="asc">升序</option>
+        <option value="desc">降序</option>
+      </select>
+      <label>筛选国家：</label>
+      <select id="filter-country"></select>
+
+      <button onclick="applySortFilter()">应用</button>
+      <button onclick="closeSortFilterModal()">关闭</button>
+    </div>
+  </div>
+
+  <footer>
+    <button onclick="openFile()">📂 批量导入</button>
+    <button onclick="searchMovies()">🔍 搜索电影</button>
+    <button onclick="addMovie()">➕ 手动添加</button>
+    <button onclick="openSortFilterModal()">🔽 排序/筛选</button>
+    <button onclick="removeDuplicates()">🗑 去重</button>
+  </footer>
+
+  <script>
+    /* ==============================
+     *  全局变量 & 本地存储
+     * ============================== */
+    let movies = [];
+    let weeklyGoal = []; 
+    let points = 0;
+
+    function loadData() {
+      const savedMovies = localStorage.getItem("movies");
+      const savedWeeklyGoal = localStorage.getItem("weeklyGoal");
+      const savedPoints = localStorage.getItem("points");
+
+      if (savedMovies) movies = JSON.parse(savedMovies);
+      if (savedWeeklyGoal) weeklyGoal = JSON.parse(savedWeeklyGoal);
+      if (savedPoints) points = parseInt(savedPoints, 10);
+    }
+
+    function saveData() {
+      localStorage.setItem("movies", JSON.stringify(movies));
+      localStorage.setItem("weeklyGoal", JSON.stringify(weeklyGoal));
+      localStorage.setItem("points", points);
+    }
+
+    loadData(); // 首次加载
+
+    /* ==============================
+     *  页面区块切换
+     * ============================== */
+    function showSection(sectionId) {
+      document.querySelectorAll('.section').forEach(section => section.classList.remove('active'));
+      document.getElementById(sectionId).classList.add('active');
+    }
+
+    /* ==============================
+     *  积分显示
+     * ============================== */
+    function updatePointsDisplay() {
+      const el1 = document.getElementById("points-value");
+      const el2 = document.getElementById("points-value-2");
+      if (el1) el1.textContent = points;
+      if (el2) el2.textContent = points;
+    }
+
+    /* ==============================
+     *  渲染“未观看”电影清单
+     * ============================== */
+    function renderMovieList() {
+      const movieList = document.getElementById("movie-list");
+      if (!movieList) return;
+      movieList.innerHTML = '';
+
+      movies
+        .filter(m => !m.watched)
+        .forEach(movie => {
+          const div = document.createElement("div");
+          div.className = "movie-card";
+          div.innerHTML = `
+            <h4>${movie.title} (${movie.year})</h4>
+            <p>${movie.country} | 评分：${movie.rating}</p>
+          `;
+
+          // “标记已看”按钮
+          const watchBtn = document.createElement("button");
+          watchBtn.textContent = "标记已看";
+          watchBtn.onclick = () => markAsWatched(movie.title);
+
+          // “编辑”按钮
+          const editBtn = document.createElement("button");
+          editBtn.textContent = "编辑";
+          editBtn.onclick = () => editMovie(movie.title);
+
+          // “删除”按钮
+          const delBtn = document.createElement("button");
+          delBtn.textContent = "删除";
+          delBtn.onclick = () => deleteMovie(movie.title);
+
+          div.appendChild(watchBtn);
+          div.appendChild(editBtn);
+          div.appendChild(delBtn);
+
+          movieList.appendChild(div);
+        });
+    }
+
+    /* ==============================
+     *  标记已看
+     * ============================== */
+    function markAsWatched(title) {
+      const today = new Date().toISOString().split('T')[0];
+
+      movies = movies.map(movie => {
+        if (movie.title === title) {
+          movie.watched = true;
+          movie.completedDate = today;
+        }
+        return movie;
+      });
+
+      points += 10; 
+      alert(`完成！积分+10，总积分：${points}`);
+
+      renderMovieList();
+      renderGoalList();
+      renderCompletedList();
+      updateStats();
+      updatePointsDisplay();
+      saveData();
+    }
+
+    /* ==============================
+     *  编辑电影信息
+     * ============================== */
+    function editMovie(title) {
+      const movie = movies.find(m => m.title === title);
+      if (!movie) return;
+
+      const newTitle = prompt("修改电影名称：", movie.title);
+      if (!newTitle) return; // 用户取消或清空就不修改
+
+      const newYear = prompt("修改年份：", movie.year) || "未知年份";
+      const newCountry = prompt("修改国家：", movie.country) || "未知国家";
+      const newRating = prompt("修改评分：", movie.rating) || "无评分";
+
+      movies = movies.map(m => {
+        if (m.title === title) {
+          return {
+            ...m,
+            title: newTitle,
+            year: newYear,
+            country: newCountry,
+            rating: newRating
+          };
+        }
+        return m;
+      });
+
+      alert(`已更新电影信息：${newTitle} (${newYear})`);
+      renderMovieList();
+      renderGoalList();
+      renderCompletedList();
+      updateStats();
+      updatePointsDisplay();
+      saveData();
+    }
+
+    /* ==============================
+     *  删除电影
+     * ============================== */
+    function deleteMovie(title) {
+      const confirmDel = confirm(`确定要删除《${title}》吗？此操作不可恢复！`);
+      if (!confirmDel) return;
+
+      // 从 movies + weeklyGoal 中彻底移除
+      movies = movies.filter(m => m.title !== title);
+      weeklyGoal = weeklyGoal.filter(m => m.title !== title);
+
+      alert(`《${title}》已删除。`);
+      renderMovieList();
+      renderGoalList();
+      renderCompletedList();
+      updateStats();
+      updatePointsDisplay();
+      saveData();
+    }
+
+    /* ==============================
+     *  在“已观看”中记录感想
+     * ============================== */
+    function recordReview(title) {
+      const movie = movies.find(m => m.title === title);
+      if (!movie) return;
+
+      const newReview = prompt("请输入观影感想：", movie.review || "");
+      if (newReview === null) return; // 用户取消
+      // 可能输入空字符串，表示清空感想
+
+      movies = movies.map(m => {
+        if (m.title === title) {
+          return { ...m, review: newReview };
+        }
+        return m;
+      });
+
+      alert("感想已更新！");
+      renderCompletedList();
+      saveData();
+    }
+
+    /* ==============================
+     *  每周目标: 手动选择
+     * ============================== */
+    function manualSelectGoal() {
+      const modal = document.getElementById("manual-select-modal");
+      const list = document.getElementById("manual-select-list");
+      list.innerHTML = '';
+
+      movies
+        .filter(movie => !movie.watched)
+        .forEach(movie => {
+          const div = document.createElement("div");
+          div.innerHTML = `
+            <input type="checkbox" id="${movie.title}" value="${movie.title}">
+            <label for="${movie.title}">${movie.title} (${movie.year})</label>
+          `;
+          list.appendChild(div);
+        });
+
+      modal.style.display = "block";
+    }
+
+    function confirmManualSelection() {
+      const modal = document.getElementById("manual-select-modal");
+      const checkboxes = document.querySelectorAll("#manual-select-list input[type='checkbox']:checked");
+      const selectedTitles = Array.from(checkboxes).map(checkbox => checkbox.value);
+
+      weeklyGoal = [];
+
+      const deadlineInput = document.getElementById("deadline").value;
+      const fallback = new Date();
+      fallback.setDate(fallback.getDate() + 7);
+      const finalDeadline = deadlineInput ? new Date(deadlineInput) : fallback;
+
+      selectedTitles.forEach(title => {
+        const movie = movies.find(m => m.title === title);
+        if (movie) {
+          weeklyGoal.push({
+            ...movie,
+            deadline: finalDeadline.toISOString().split('T')[0]
+          });
+        }
+      });
+
+      modal.style.display = "none";
+      renderGoalList();
+      saveData();
+    }
+
+    function closeModal() {
+      document.getElementById("manual-select-modal").style.display = "none";
+    }
+
+    /* ==============================
+     *  随机生成目标
+     * ============================== */
+    function randomGenerateGoal() {
+      const goalNumber = parseInt(document.getElementById('weekly-goal').value);
+      if (!goalNumber || goalNumber <= 0) {
+        alert("请输入有效的目标数量！");
+        return;
+      }
+
+      const deadlineInput = document.getElementById("deadline").value;
+      const fallback = new Date();
+      fallback.setDate(fallback.getDate() + 7);
+      const finalDeadline = deadlineInput ? new Date(deadlineInput) : fallback;
+
+      const candidates = movies.filter(movie => !movie.watched);
+      candidates.sort(() => Math.random() - 0.5);
+      const chosen = candidates.slice(0, goalNumber);
+
+      weeklyGoal = chosen.map(m => ({
+        ...m,
+        deadline: finalDeadline.toISOString().split('T')[0]
+      }));
+
+      renderGoalList();
+      saveData();
+    }
+
+    /* ==============================
+     *  渲染目标列表 (含逾期提示)
+     * ============================== */
+    function renderGoalList() {
+      const goalList = document.getElementById("goal-list");
+      if (!goalList) return;
+      goalList.innerHTML = '';
+
+      const now = new Date();
+
+      weeklyGoal.forEach(movie => {
+        const div = document.createElement("div");
+        div.className = 'movie-card';
+
+        let info = '';
+        if (movie.deadline) {
+          const dl = new Date(movie.deadline);
+          const diffTime = dl - now;
+          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+          if (diffDays > 0) {
+            info = `还剩${diffDays}天到期`;
+          } else {
+            info = `已逾期${Math.abs(diffDays)}天`;
+            div.classList.add("expired");
+          }
+        } else {
+          info = '无截止日期';
+        }
+
+        div.innerHTML = `
+          <h3>${movie.title} (${movie.year})</h3>
+          <p>截止：<span>${movie.deadline || '无'}</span> / ${info}</p>
+        `;
+
+        const btnComplete = document.createElement("button");
+        btnComplete.textContent = "完成";
+        btnComplete.onclick = () => completeGoal(movie.title);
+
+        const btnSkip = document.createElement("button");
+        btnSkip.textContent = "跳过(-5分)";
+        btnSkip.onclick = () => skipGoal(movie.title);
+
+        div.appendChild(btnComplete);
+        div.appendChild(btnSkip);
+        goalList.appendChild(div);
+      });
+    }
+
+    /* ==============================
+     *  完成/跳过 目标
+     * ============================== */
+    function completeGoal(title) {
+      const today = new Date().toISOString().split('T')[0];
+      const goalItem = weeklyGoal.find(m => m.title === title);
+      const nowStr = new Date().toISOString().split('T')[0];
+      let expiredFlag = false;
+      if (goalItem && goalItem.deadline) {
+        expiredFlag = nowStr > goalItem.deadline;
+      }
+
+      // movies里标记已看
+      movies = movies.map(movie => {
+        if (movie.title === title) {
+          movie.watched = true;
+          movie.completedDate = today;
+        }
+        return movie;
+      });
+
+      // weeklyGoal 里移除
+      weeklyGoal = weeklyGoal.filter(m => m.title !== title);
+
+      if (!expiredFlag) {
+        points += 10;
+        alert(`完成！积分+10，总积分：${points}`);
+      } else {
+        alert("完成，但已超过截止日期，未获得积分。");
+      }
+
+      renderMovieList();
+      renderGoalList();
+      renderCompletedList();
+      updateStats();
+      updatePointsDisplay();
+      saveData();
+    }
+
+    function skipGoal(title) {
+      alert(`跳过《${title}》，扣除5分。`);
+      points -= 5;
+      weeklyGoal = weeklyGoal.filter(m => m.title !== title);
+
+      renderGoalList();
+      updateStats();
+      updatePointsDisplay();
+      saveData();
+    }
+
+    /* ==============================
+     *  渲染已观看列表 (折叠)
+     * ============================== */
+    function renderCompletedList() {
+      const container = document.getElementById("completed-collapsible");
+      if (!container) return;
+      container.innerHTML = '';
+
+      const watchedMovies = movies.filter(m => m.watched);
+      const groups = {};
+      watchedMovies.forEach(m => {
+        const d = m.completedDate || "未知日期";
+        if (!groups[d]) groups[d] = [];
+        groups[d].push(m);
+      });
+
+      // 日期降序
+      Object.keys(groups)
+        .sort((a, b) => b.localeCompare(a))
+        .forEach(dateStr => {
+          const header = document.createElement("div");
+          header.className = "collapsible-header";
+          header.textContent = `${dateStr} 完成 (${groups[dateStr].length}部)`;
+          header.onclick = () => {
+            content.classList.toggle("show");
+          };
+
+          const content = document.createElement("div");
+          content.className = "collapsible-content";
+          const grid = document.createElement("div");
+          grid.className = "movie-list-grid";
+
+          groups[dateStr].forEach(movie => {
+            const div = document.createElement("div");
+            div.className = "movie-card";
+            
+            let html = `
+              <h4>${movie.title} (${movie.year})</h4>
+              <p>${movie.country} | 评分：${movie.rating}</p>
+              <p>完成于：${movie.completedDate}</p>
+            `;
+            if (movie.review) {
+              html += `<div class="review-text">观影感想：${movie.review}</div>`;
+            }
+            div.innerHTML = html;
+
+            const editBtn = document.createElement("button");
+            editBtn.textContent = "编辑";
+            editBtn.onclick = () => editMovie(movie.title);
+
+            const delBtn = document.createElement("button");
+            delBtn.textContent = "删除";
+            delBtn.onclick = () => deleteMovie(movie.title);
+
+            const reviewBtn = document.createElement("button");
+            reviewBtn.textContent = "感想";
+            reviewBtn.onclick = () => recordReview(movie.title);
+
+            div.appendChild(editBtn);
+            div.appendChild(delBtn);
+            div.appendChild(reviewBtn);
+
+            grid.appendChild(div);
+          });
+
+          content.appendChild(grid);
+          container.appendChild(header);
+          container.appendChild(content);
+        });
+    }
+
+    /* ==============================
+     *  批量导入 & 去重
+     * ============================== */
+    function openFile() {
+      document.getElementById('fileInput').click();
+    }
+
+    function handleFileUpload(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = function (e) {
+        try {
+          const importedMovies = JSON.parse(e.target.result);
+          if (Array.isArray(importedMovies)) {
+            movies = movies.concat(
+              importedMovies.map(movie => ({
+                title: movie.title || "未命名电影",
+                year: movie.year || "未知年份",
+                country: movie.country || "未知国家",
+                rating: movie.rating || "无评分",
+                watched: movie.watched || false,
+                review: movie.review || ""
+              }))
+            );
+            alert("电影清单导入成功！");
+            removeDuplicates(false);
+            renderMovieList();
+            renderGoalList();
+            renderCompletedList();
+            updateStats();
+            updatePointsDisplay();
+            saveData();
+          } else {
+            throw new Error("JSON 格式错误");
+          }
+        } catch (error) {
+          alert("导入失败，请检查文件格式！");
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    function removeDuplicates(showAlert = true) {
+      const uniqueMap = new Map();
+      const newArr = [];
+      for (let m of movies) {
+        const key = m.title + '##' + m.year;
+        if (!uniqueMap.has(key)) {
+          uniqueMap.set(key, true);
+          newArr.push(m);
+        }
+      }
+
+      const removedCount = movies.length - newArr.length;
+      movies = newArr;
+      // weeklyGoal 也要去重
+      weeklyGoal = weeklyGoal.filter(m => {
+        const key = m.title + '##' + m.year;
+        return uniqueMap.has(key);
+      });
+
+      if (showAlert) {
+        if (removedCount > 0) {
+          alert(`已清理 ${removedCount} 条重复电影。`);
+        } else {
+          alert("未发现重复电影。");
+        }
+      }
+
+      renderMovieList();
+      renderGoalList();
+      renderCompletedList();
+      updateStats();
+      updatePointsDisplay();
+      saveData();
+    }
+
+    /* ==============================
+     *  统计数据
+     * ============================== */
+    function updateStats() {
+      const totalMovies = movies.length;
+      const watchedMovies = movies.filter(movie => movie.watched).length;
+      const unwatchedMovies = totalMovies - watchedMovies;
+
+      const tm = document.getElementById('total-movies');
+      const wm = document.getElementById('watched-movies');
+      const um = document.getElementById('unwatched-movies');
+
+      if (tm) tm.textContent = totalMovies;
+      if (wm) wm.textContent = watchedMovies;
+      if (um) um.textContent = unwatchedMovies;
+    }
+
+    /* ==============================
+     *  搜索电影
+     * ============================== */
+    function searchMovies() {
+      const query = prompt("请输入要搜索的电影名（关键词）：");
+      if (!query) return;
+
+      document.querySelectorAll(".highlight").forEach(el => el.classList.remove("highlight"));
+
+      const found = movies.find(m => m.title.includes(query));
+      if (!found) {
+        alert("没有找到符合条件的电影。");
+        return;
+      }
+
+      alert(`找到电影：${found.title} (${found.year})，正在定位...`);
+
+      if (!found.watched) {
+        showSection('list-section');
+        renderMovieList(); 
+        const cards = document.querySelectorAll("#movie-list .movie-card");
+        for (let card of cards) {
+          const h4 = card.querySelector("h4");
+          if (h4 && h4.textContent.includes(found.title)) {
+            card.classList.add("highlight");
+            card.scrollIntoView({ behavior: "smooth", block: "center" });
+            break;
+          }
+        }
+      } else {
+        showSection('goal-section');
+        renderCompletedList(); 
+        const dateStr = found.completedDate || "未知日期";
+        const headers = document.querySelectorAll("#completed-collapsible .collapsible-header");
+        const contents = document.querySelectorAll("#completed-collapsible .collapsible-content");
+        for (let i = 0; i < headers.length; i++) {
+          if (headers[i].textContent.includes(dateStr)) {
+            if (!contents[i].classList.contains("show")) {
+              contents[i].classList.add("show");
+            }
+            const cards = contents[i].querySelectorAll(".movie-card");
+            for (let c of cards) {
+              const hh4 = c.querySelector("h4");
+              if (hh4 && hh4.textContent.includes(found.title)) {
+                c.classList.add("highlight");
+                c.scrollIntoView({ behavior: "smooth", block: "center" });
+                break;
+              }
+            }
+            break;
+          }
+        }
+      }
+    }
+
+    /* ==============================
+     *  手动添加电影
+     * ============================== */
+    function addMovie() {
+      const line = prompt("请输入电影信息（格式：标题/年份/国家/评分）：");
+      if (!line) return;
+
+      const parts = line.split('/');
+      const title = parts[0]?.trim() || "";
+      const year = parts[1]?.trim() || "未知年份";
+      const country = parts[2]?.trim() || "未知国家";
+      const rating = parts[3]?.trim() || "无评分";
+
+      if (!title) {
+        alert("电影标题不能为空，已取消操作。");
+        return;
+      }
+
+      const duplicate = movies.find(m => m.title === title && m.year === year);
+      if (duplicate) {
+        alert(`已存在同名同年电影《${title} (${year})》，已跳过。`);
+        return;
+      }
+
+      const newMovie = {
+        title,
+        year,
+        country,
+        rating,
+        watched: false,
+        review: ""
+      };
+
+      movies.push(newMovie);
+      renderMovieList();
+      updateStats();
+      updatePointsDisplay();
+      saveData();
+      alert(`成功添加：《${title}》！`);
+    }
+
+    /* ==============================
+     *  排序/筛选
+     * ============================== */
+    function openSortFilterModal() {
+      populateCountryFilter();
+      document.getElementById("sort-filter-modal").style.display = "block";
+    }
+    function closeSortFilterModal() {
+      document.getElementById("sort-filter-modal").style.display = "none";
+    }
+    function populateCountryFilter() {
+      const countrySelect = document.getElementById("filter-country");
+      if (!countrySelect) return;
+      countrySelect.innerHTML = '';
+      const optionAll = document.createElement("option");
+      optionAll.value = "";
+      optionAll.textContent = "(不限)";
+      countrySelect.appendChild(optionAll);
+
+      const countries = [...new Set(movies.map(m => m.country))];
+      countries.forEach(c => {
+        const opt = document.createElement("option");
+        opt.value = c;
+        opt.textContent = c;
+        countrySelect.appendChild(opt);
+      });
+    }
+    function applySortFilter() {
+      const sortField = document.getElementById("sort-field").value;
+      const sortOrder = document.getElementById("sort-order").value;
+      const filterCountry = document.getElementById("filter-country").value;
+
+      let filteredMovies = filterCountry
+        ? movies.filter(m => m.country === filterCountry)
+        : [...movies];
+
+      if (sortField) {
+        filteredMovies.sort((a, b) => {
+          let valA = a[sortField];
+          let valB = b[sortField];
+          if (sortField === "year" || sortField === "rating") {
+            valA = parseFloat(valA) || 0;
+            valB = parseFloat(valB) || 0;
+          }
+          if (sortOrder === "asc") {
+            return valA < valB ? -1 : (valA > valB ? 1 : 0);
+          } else {
+            return valA > valB ? -1 : (valA < valB ? 1 : 0);
+          }
+        });
+      }
+
+      movies = filteredMovies;
+      renderMovieList();
+      renderGoalList();
+      renderCompletedList();
+      updateStats();
+      updatePointsDisplay();
+      saveData();
+      closeSortFilterModal();
+    }
+
+    /* ==============================
+     *  初始化
+     * ============================== */
+    function init() {
+      renderMovieList();
+      renderGoalList();
+      renderCompletedList();
+      updateStats();
+      updatePointsDisplay();
+    }
+
+    init();
+  </script>
+
+  <!-- ========== PWA: 注册 Service Worker ========== -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('service-worker.js')
+          .then(reg => console.log('Service Worker 注册成功:', reg))
+          .catch(err => console.log('Service Worker 注册失败:', err));
+      });
+    }
+  </script>
+</body>
+</html>
